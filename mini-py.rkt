@@ -9,8 +9,8 @@
 ;;
 ;; <program>           ::= {<class-decl>} <expression>
 ;;                         ; a-program
-;; 
-;; <expression>        ::= <identifier> 
+;;
+;; <expression>        ::= <identifier>
 ;;                         ; id-exp
 ;;                      | <number>
 ;;                         ; number-exp
@@ -18,7 +18,7 @@
 ;;                         ; string-exp
 ;;                      | <boolean>
 ;;                         ; bool-exp
-;;                      | x16 "(" {<number>} ")" 
+;;                      | x16 "(" {<number>} ")"
 ;;                         ; hex-exp
 ;;                      | var {<identifier> = <expression>} (",") in <expression>
 ;;                         ; var-exp
@@ -30,7 +30,7 @@
 ;;                         ; set-exp
 ;;                      | begin <expression> {";" <expression>} end
 ;;                         ; begin-exp
-;;                      | for "(" <identifier> = <expression> to <expression> ")" 
+;;                      | for "(" <identifier> = <expression> to <expression> ")"
 ;;                        "{" <expression> {"," <expression>} "}"
 ;;                         ; for-exp
 ;;                      | while <expression> do "(" <expression> {"," <expression>} ")" done
@@ -111,35 +111,35 @@
 ;;                         ; xor-type-exp
 ;;                      | "'" <identifier>
 ;;                         ; quote-exp
-;; 
-;; <primitive>         ::= + | - | * | / | % | add1 | sub1 | longitud | concatenar 
+;;
+;; <primitive>         ::= + | - | * | / | % | add1 | sub1 | longitud | concatenar
 ;;                      | eval-circuit | connect-circuits | merge-circuits
-;; 
+;;
 ;; <gate-list>         ::= empty
 ;;                         ; empty-gate-list
 ;;                      | <gate> <gate-list>
 ;;                         ; cons-gate-list
-;; 
+;;
 ;; <gate>              ::= gate <identifier> <type> <input-list>
 ;;                         ; gate-def
-;; 
+;;
 ;; <type>              ::= and | or | not | xor
-;; 
+;;
 ;; <input-list>        ::= empty
 ;;                         ; empty-input-list
 ;;                      | <boolean> <input-list>
 ;;                         ; cons-bool-input-list
 ;;                      | <identifier> <input-list>
 ;;                         ; cons-id-input-list
-;; 
+;;
 ;; <boolean>           ::= True | False
 ;;                         ; true-boolean | false-boolean
+
 
 (define scanner-spec-mini-py
   '((white-sp
      (whitespace) skip)
-    (comment
-     ("%" (arbno (not #\newline))) skip)
+    (comment("%" (arbno (not #\newline))) skip)
     (identifier(letter (arbno (or letter digit "?"))) symbol)
     (number (digit (arbno digit)) number)
     (number ("-" digit (arbno digit)) number)
@@ -162,7 +162,7 @@
     (expression ("x16" "("(arbno number) ")" ) hex-exp)
     (expression ("x32" "(" (arbno number)")" ) bignum-exp)
     
-  
+    
 
     ;;Variables
     (expression (primitive "(" (separated-list expression ",")")")
@@ -170,7 +170,10 @@
     (expression ("var" (separated-list identifier "=" expression ",") "in" expression) var-exp)
     (expression ("const" (separated-list identifier "=" expression ",") "in" expression) const-exp)
     (expression ("rec" (arbno identifier "(" (separated-list identifier ",") ")" "=" expression) "in" expression) letrec-exp)
+    (expression ("set" identifier "=" expression) set-exp)
 
+    
+    
     (expression ("begin" expression (arbno ";" expression) "end") begin-exp) 
     (expression ("for" identifier "in" expression "do" expression "done") for-exp)
     (expression ("while" expression "do" expression "done") while-exp)
@@ -317,6 +320,7 @@
         (eval-expression exp (empty-env))))))
 
 
+
 (define eval-expression
   (lambda (exp env)
     (cases expression exp
@@ -332,11 +336,24 @@
                (let ((args (eval-rands rands env)))
                  (eval-expression body (extended-env-record vars (list->vector args) env))))
       (const-exp (ids rands body)
-                (let ((args (map (lambda (x) (const-target (eval-expression x env))) rands)))
-                   (eval-expression body (extended-env-record ids (list->vector args) env))))
+  (let ((args (map (lambda (x) (const-target (eval-expression x env))) rands)))
+    (eval-expression body (extended-env-record ids (list->vector args) env))))
+
+
       (primapp-exp (prim rands)  
                    (let ((args (eval-rands rands env)))
                      (apply-primitive prim args env)))
+
+      (set-exp (id new-exp)
+  (let ((val (eval-expression new-exp env))
+        (ref (apply-env-ref env id)))
+    (if (reference? ref)
+        (begin
+          (setref! ref val)
+          val)
+        (eopl:error 'set-exp "No se puede modificar la constante ~s" id))))
+
+
       
       (if-exp (test-exp true-exp false-exp)
               (if (true-value? (eval-expression test-exp env))
@@ -996,6 +1013,7 @@
              (vector-set! vec pos val)))))
 
 
+
 ;****************************************************************************************
 ;; Funciones auxiliares
 
@@ -1058,8 +1076,6 @@
      )
    )
  )
-
-
 
 
 (interpretador)
