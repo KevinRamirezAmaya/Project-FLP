@@ -1,5 +1,4 @@
 #lang eopl
-(require racket/hash)
 ;; John Jaider Ramos Gaviria - 2370742
 ;; Kevin Ariel Ramirez Amaya - 2324793
 ;; Isabella Ruiz Celis - 2372234
@@ -162,8 +161,7 @@
     (expression ("x16" "("(arbno number) ")" ) hex-exp)
 
     ;;Variables
-    (expression (primitive "(" (separated-list expression ",")")")
-                primapp-exp)
+
     (expression ("var" (separated-list identifier "=" expression ",") "in" expression) var-exp)
     (expression ("const" (separated-list identifier "=" expression ",") "in" expression) const-exp)
     (expression ("rec" (arbno identifier "(" (separated-list identifier ",") ")" "=" expression) "in" expression) letrec-exp)
@@ -172,15 +170,18 @@
 
 
     (expression ("begin" expression (arbno ";" expression) "end") begin-exp)
-    (expression ("for" identifier "in" expression "do" expression "done") for-exp)
+    (expression ("for" "(" identifier "=" expression "to" expression ")" "{" (separated-list expression ",") "}") for-exp)
     (expression ("while" expression "do" expression "done") while-exp)
 
     (expression ("if" expression "then" expression "else" expression)
                 if-exp)
-
+    ;; Funciones
+    (expression (primitive "(" (separated-list expression ",")")")
+                primapp-exp)
     (expression ("proc" "(" (arbno identifier) ")" expression)
                 proc-exp)
-
+    (expression ( "(" expression (arbno expression) ")")
+                app-exp)
     ;;listas
     (expression ("[" (separated-list expression ";") "]") list-exp)
     (expression ("vacio?" "(" expression ")") emptyL?-exp)
@@ -342,8 +343,15 @@
       (id-exp (id) (apply-env env id))
       (var-exp (vars rands body)
                (let ((args (eval-rands rands env)))
-                 (eval-expression body
-                                  (extended-env-record vars (list->vector args) env))))
+                 (if (not (= (length vars) (length args)))
+                     (eopl:error 'var-exp
+                                 "Cantidad de variables (~a) y valores (~a) no coinciden en var"
+                                 (length vars)
+                                 (length args))
+                     (eval-expression body
+                                      (extended-env-record vars (list->vector args) env)))))
+
+
 
       (const-exp (ids rands body)
                  (let ((args (map (lambda (x) (eval-expression x env)) rands)))
@@ -363,8 +371,6 @@
                        (setref! ref val)
                        val)
                      (eopl:error 'set-exp "No se puede modificar la constante ~a" id))))
-
-
 
 
       (if-exp (test-exp true-exp false-exp)
@@ -404,6 +410,7 @@
                          )
                       (append (append (head-to-position '() le pe 0) expe) (list-tail le (+ pe 1)))
                       ))
+
       ;;Tuplas
       (tuple-exp (list) (list->vector (map (lambda (arg) (eval-expression arg env)  ) list )))
 
@@ -415,7 +422,9 @@
                      (vector-ref (eval-expression tuple env) (eval-expression index env)))
       (head-tuple-exp (tuple)(car (vector->list (eval-expression tuple env))))
       (cola-tuple-exp (tuple) (list->vector (cdr (vector->list (eval-expression tuple env)))))
+
       ;;Registros
+
       (record-exp (id exp ids exps)
                   (list (cons id ids) (eval-list (cons exp exps) env))
                   )
@@ -448,29 +457,20 @@
                         (else (eopl:error 'invalid-register "No es un indice de registro valido"))
                         ))
 
+      ;; Procedimientos
+
+      (app-exp (rator rands)
+               (let ((proc (eval-expression rator env))
+                     (args (eval-rands rands env)))
+                 (if (procval? proc)
+                     (apply-procedure proc args) proc
+                     ;;                      (eopl:error 'eval-expression
+                     ;;                                  "Attempt to apply non-procedure ~s" proc))
+                     )))
+
       (letrec-exp (proc-names idss bodies letrec-body)
                   (eval-expression letrec-body
                                    (extend-env-recursively proc-names idss bodies env)))
-
-      (for-exp (var-exp collection-exp body-exp)
-               (let* ((collection-val (eval-expression collection-exp env)))
-                 (if (list? collection-val)
-                     (let loop ((lst collection-val)
-                                (env env)
-                                (result '()))
-                       (if (null? lst)
-                           (if (null? result)
-                               '()
-                               (car (reverse result))) ; devolver el último resultado evaluado del cuerpo
-                           (let ((current-val (car lst)))
-                             (let ((new-env (extend-env (list var-exp)
-                                                        (list current-val)
-                                                        env)))
-                               (loop (cdr lst)
-                                     env
-                                     (cons (eval-expression body-exp new-env) result))))))
-                     (eopl:error 'for-exp "Se esperaba una lista para iterar, pero se obtuvo: ~a" collection-val))))
-
 
       (begin-exp (exp exps)
                  (let loop ((acc (eval-expression exp env))
@@ -485,6 +485,26 @@
                    (if (true-value? (eval-expression test env))
                        (loop (eval-expression body env))
                        last-val)))
+      (for-exp (var start-expr end-expr body-exprs)
+               (let* ((start (eval-expression start-expr env))
+                      (end (eval-expression end-expr env)))
+
+                 ;; Función para evaluar el cuerpo del for
+                 (define (eval-body)
+                   (for-each
+                    (lambda (expr)
+                      (eval-expression expr env)) ; usa el mismo entorno
+                    body-exprs))
+
+                 ;; Loop de ejecución desde start hasta end
+                 (define (loop i)
+                   (if (> i end)
+                       'done
+                       (begin
+                         (eval-body)
+                         (loop (+ i 1)))))
+
+                 (loop start)))
 
 
 
