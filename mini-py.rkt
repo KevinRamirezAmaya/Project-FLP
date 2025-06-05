@@ -1,4 +1,5 @@
 #lang eopl
+(require racket/hash)
 ;; John Jaider Ramos Gaviria - 2370742
 ;; Kevin Ariel Ramirez Amaya - 2324793
 ;; Isabella Ruiz Celis - 2372234
