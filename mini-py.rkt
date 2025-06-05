@@ -135,7 +135,6 @@
 ;; <boolean>           ::= True | False
 ;;                         ; true-boolean | false-boolean
 
-
 (define scanner-spec-mini-py
   '((white-sp
      (whitespace) skip)
@@ -147,6 +146,7 @@
     (number (digit (arbno digit) "." digit (arbno digit)) number)
     (number ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (string("\"" (arbno (not #\")) "\"") string)))
+
 
 
 (define grammar-mini-py
@@ -222,6 +222,16 @@
     (primitive ("eval-circuit") eval-circuit-prim)
     (primitive ("connect-circuits") connect-circuits-prim)
     (primitive ("merge-circuits") merge-circuits-prim)
+
+    ;; Operadores Binarios
+    (expression (">" "(" expression expression ")") greater-than-exp)
+    (expression (">=" "(" expression expression ")") greater-than-equal-exp)
+    (expression ("<" "(" expression expression ")") less-than-exp)
+    (expression ("<=" "(" expression expression ")") less-than-equal-exp)
+    (expression ("==" "(" expression expression ")") equal-exp)
+    (expression ("!=" "(" expression expression ")") not-equal-exp)
+
+
 
 
     ;; Circuitos
@@ -339,7 +349,6 @@
                  (let ((args (map (lambda (x) (eval-expression x env)) rands)))
                    (eval-expression body
                                     (const-env-record ids args env))))
-
 
 
       (primapp-exp (prim rands)
@@ -485,7 +494,30 @@
                    (newline)
                    val)) ; también devuelve el valor para no romper secuencia
 
+      ;;operadores binarios
+      (greater-than-exp (e1 e2)
+                        (> (eval-expression e1 env)
+                           (eval-expression e2 env)))
 
+      (greater-than-equal-exp (e1 e2)
+                              (>= (eval-expression e1 env)
+                                  (eval-expression e2 env)))
+
+      (less-than-exp (e1 e2)
+                     (< (eval-expression e1 env)
+                        (eval-expression e2 env)))
+
+      (less-than-equal-exp (e1 e2)
+                           (<= (eval-expression e1 env)
+                               (eval-expression e2 env)))
+
+      (equal-exp (e1 e2)
+                 (= (eval-expression e1 env)
+                    (eval-expression e2 env)))
+
+      (not-equal-exp (e1 e2)
+                     (not (= (eval-expression e1 env)
+                             (eval-expression e2 env))))
 
       (new-object-exp (class-name rands)
                       (let ((args (eval-rands rands env))
@@ -505,6 +537,7 @@
                          method-name (apply-env env '%super) obj args)))
 
       )))
+
 
 ; funciones auxiliares para aplicar eval-expression a cada elemento de una
 ; lista de operandos (expresiones)
@@ -1131,6 +1164,8 @@
         )
     )
   )
+
+
 
 
 (interpretador)
