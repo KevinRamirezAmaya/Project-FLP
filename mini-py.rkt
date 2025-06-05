@@ -135,11 +135,12 @@
 ;; <boolean>           ::= True | False
 ;;                         ; true-boolean | false-boolean
 
+
 (define scanner-spec-mini-py
   '((white-sp
      (whitespace) skip)
     (comment
-     ("%" (arbno (not #\newline))) skip)
+     ("%!" (arbno (not #\newline))) skip)
     (identifier(letter (arbno (or letter digit "?"))) symbol)
     (number (digit (arbno digit)) number)
     (number ("-" digit (arbno digit)) number)
@@ -158,11 +159,7 @@
     (expression (number) number-exp)
     (expression (string) string-exp)
     (expression (boolean) bool-exp)
-    (expression ("x8" "(" (arbno number)")") oct-exp)
     (expression ("x16" "("(arbno number) ")" ) hex-exp)
-    (expression ("x32" "(" (arbno number)")" ) bignum-exp)
-
-
 
     ;;Variables
     (expression (primitive "(" (separated-list expression ",")")")
@@ -183,10 +180,6 @@
 
     (expression ("proc" "(" (arbno identifier) ")" expression)
                 proc-exp)
-
-
-
-
 
     ;;listas
     (expression ("[" (separated-list expression ";") "]") list-exp)
@@ -215,12 +208,15 @@
     (expression ("ref-registro" "(" expression "," expression")") ref-record-exp)
     (expression ("set-registro" "(" expression "," expression "," expression")") set-record-exp)
 
-
+    ;;print
+    (expression ("print" "(" expression ")") print-exp)
 
     ;; Primitivas
     (primitive ("+") add-prim)
     (primitive ("-") substract-prim)
     (primitive ("*") mult-prim)
+    (primitive ("/") div-prim)
+    (primitive ("%") mod-prim)
     (primitive ("add1") incr-prim)
     (primitive ("sub1") decr-prim)
     (primitive ("eval-circuit") eval-circuit-prim)
@@ -320,16 +316,18 @@
                  (eval-expression exp (empty-env))))))
 
 
-
 (define eval-expression
   (lambda (exp env)
     (cases expression exp
       (mostrar-exp () the-class-env)
 
       (number-exp (number) number)
-      (oct-exp (number) number)
-      (hex-exp (number) number)
-      (bignum-exp (number) number)
+      (hex-exp (nums)
+               (let loop ((ns nums) (acc 0))
+                 (if (null? ns)
+                     acc
+                     (loop (cdr ns) (+ (* acc 16) (car ns))))))
+
       (string-exp (datum) (substring datum 1 (- (string-length datum) 1)))
       (id-exp (id) (apply-env env id))
       (var-exp (vars rands body)
@@ -481,6 +479,13 @@
 
 
 
+      (print-exp (exp)
+                 (let ((val (eval-expression exp env)))
+                   (display val)
+                   (newline)
+                   val)) ; también devuelve el valor para no romper secuencia
+
+
 
       (new-object-exp (class-name rands)
                       (let ((args (eval-rands rands env))
@@ -520,6 +525,15 @@
       (mult-prim () (* (car args) (cadr args)))
       (incr-prim () (+ (car args) 1))
       (decr-prim () (- (car args) 1))
+      (div-prim () (/ (car args) (cadr args) ))
+      (mod-prim ()
+                (let ((a (car args)) (b (cadr args)))
+                  (cond
+                    ((and (integer? a) (integer? b)) (modulo a b))
+                    ((and (real? a) (real? b))
+                     (- a (* b (floor (/ a b))))) ; implementación manual del módulo real
+                    (else (eopl:error 'mod-prim "No se puede aplicar % a ~s y ~s" a b)))))
+
       (eval-circuit-prim () (eval-circuit (car args) env))
       (connect-circuits-prim () (connect-circuits (car args) (cadr args) (caddr args)))
       (merge-circuits-prim () (merge-circuits (car args) (cadr args) (caddr args)))
