@@ -111,6 +111,7 @@
 ;; 
 ;; <letra> ::= [A-Za-z]
 
+;Especificación Léxica
 
 (define scanner-spec-mini-py
   '((white-sp
@@ -124,6 +125,7 @@
     (number ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (string("\"" (arbno (not #\")) "\"") string)))
 
+;Especificación Sintáctica (gramática)
 
 (define grammar-mini-py
   '((program ((arbno class-decl) expression) a-program)
@@ -148,7 +150,7 @@
     
     (expression ("begin" expression (arbno ";" expression) "end") begin-exp) 
     (expression ("for" "(" identifier "=" expression "to" expression ")" "{" (separated-list expression ",") "}") for-exp)
-    (expression ("while" expression "do" expression "done") while-exp)
+    (expression ("while" expression "do" "("(separated-list expression ",")")" "done") while-exp)
      
     (expression ("if" expression "then" expression "else" expression)
                 if-exp)
@@ -296,12 +298,19 @@
       scanner-spec-mini-py
       grammar-mini-py)))
 
+;*******************************************************************************************
+;El Interprete
+
+;eval-program: <programa> -> numero
+; función que evalúa un programa teniendo en cuenta un ambiente dado (se inicializa dentro del programa)
+
 (define eval-program 
   (lambda (pgm)
     (cases program pgm
       (a-program (c-decls exp)
         (elaborate-class-decls! c-decls) ;\new1
         (eval-expression exp (empty-env))))))
+
 
 (define eval-expression
   (lambda (exp env)
@@ -449,11 +458,17 @@
                        (loop (eval-expression (car exps) env)
                              (cdr exps)))))
 
-      (while-exp (test body)
-                 (let loop ((last-val 1))
-                   (if (true-value? (eval-expression test env))
-                       (loop (eval-expression body env))
-                       last-val)))
+      (while-exp (test-exp body-exps)
+                 (let loop ()
+                   (let ((test-val (eval-expression test-exp env)))
+                     (if test-val
+                         (begin
+                           (for-each (lambda (exp)
+                                       (eval-expression exp env))
+                                     body-exps)
+                           (loop))
+                         'done))))
+
       (for-exp (var start-exp end-exp body)
          (let ((start-val (eval-expression start-exp env))
                (end-val (eval-expression end-exp env)))
