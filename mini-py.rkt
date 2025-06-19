@@ -226,12 +226,16 @@
     (type ("or") or-type)
     (type ("not") not-type)
     (type ("xor") xor-type)
+    (expression ("and-type") and-type-exp)
+    (expression ("or-type") or-type-exp)
+    (expression ("not-type") not-type-exp)
+    (expression ("xor-type") xor-type-exp)
     (input-list ("empty") empty-input-list)
     (input-list (boolean input-list) cons-bool-input-list)
     (input-list (identifier input-list) cons-id-input-list)
     (boolean ("True") true-boolean)
     (boolean ("False") false-boolean)
-
+    (expression ("'" identifier) quote-exp)
 
     ;^;;;;;;;;;;;;;;; new productions for oop ;;;;;;;;;;;;;;;;
 
@@ -311,7 +315,25 @@
         (elaborate-class-decls! c-decls) ;\new1
         (eval-expression exp (empty-env))))))
 
+; Ambiente inicial
+;(define init-env
+;  (lambda ()
+;    (extend-env
+;     '(x y z)
+;     '(4 2 5)
+;     (empty-env))))
 
+
+;(define init-env
+;  (lambda ()
+;    (extend-env
+;     '(x y z f)
+;     (list 4 2 5 (closure '(y) (primapp-exp (mult-prim) (cons (var-exp 'y) (cons (primapp-exp (decr-prim) (cons (var-exp 'y) ())) ())))
+;                      (empty-env)))
+;     (empty-env))))
+
+;eval-expression: <expression> <enviroment> -> numero
+; evalua la expresión en el ambiente de entrada
 (define eval-expression
   (lambda (exp env)
     (cases expression exp
@@ -364,8 +386,11 @@
                   (false-boolean () #f)))
       
       (circuit-exp (gate-list) (circuit-def gate-list))
-      
-      
+      (and-type-exp () (and-type))
+      (or-type-exp () (or-type))
+      (not-type-exp () (not-type))
+      (xor-type-exp () (xor-type))
+      (quote-exp (id) id)
       ;Listas
       (list-exp (list) (eval-list list env))
       (create-list-exp (ca co)
@@ -577,7 +602,7 @@
                              (eopl:error 'str-concat-prim "Argumentos no son cadenas: ~s, ~s" str1 str2))))
       (eval-circuit-prim () (eval-circuit (car args) env))
       (connect-circuits-prim () (connect-circuits (car args) (cadr args) (caddr args)))
-      (merge-circuits-prim () (merge-circuits (car args) (cadr args) (caddr args)))
+      (merge-circuits-prim () (merge-circuits (car args) (cadr args) (caddr args) (cadddr args)))
 
       )))
 
@@ -1054,27 +1079,24 @@
 
 
 (define merge-circuits
-  (lambda (circuit1 circuit2 op-type)
+  (lambda (circuit1 circuit2 op-type gate-name)
     (cases circuit circuit1
-      (circuit-def (glist1)
+      (circuit-def (gate-list1)
         (cases circuit circuit2
-          (circuit-def (glist2)
-            (let* (
-                   ;; Unimos las listas de compuertas
-                   (combined-gates (append-gate-lists glist1 glist2))
-                   ;; Obtenemos la salida final de cada circuito
-                   (out1 (last-gate-output glist1))
-                   (out2 (last-gate-output glist2))
-                   ;; Creamos la nueva compuerta de combinación
-                   (merge-gate (gate-def 'G-merged op-type 
-                                         (cons-id-input-list out1 
-                                           (cons-id-input-list out2 
-                                             (empty-input-list)))))
-                   ;; Agregamos la nueva compuerta al final
-                   (final-gates (append-gate-lists combined-gates 
-                                                   (cons-gate-list merge-gate (empty-gate-list)))))
-              ;; Retornamos el nuevo circuito
-              (circuit-def final-gates))))))))
+          (circuit-def (gate-list2)
+            (let ((output1 (last-gate-output gate-list1))
+                  (output2 (last-gate-output gate-list2)))
+              (circuit-def 
+               (append-gate-lists
+                gate-list1
+                (append-gate-lists
+                 gate-list2
+                 (cons-gate-list 
+                  (gate-def gate-name op-type 
+                           (cons-id-input-list output1 
+                                              (cons-id-input-list output2 
+                                                                 (empty-input-list))))
+                  (empty-gate-list))))))))))))
 
 
 
