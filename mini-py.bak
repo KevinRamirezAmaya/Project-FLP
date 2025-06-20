@@ -3,8 +3,6 @@
 ;; Kevin Ariel Ramirez Amaya - 2324793
 ;; Isabella Ruiz Celis - 2372234
 
-;; Repositorio: https://github.com/KevinRamirezAmaya/Project-FLP.git
-
 ;; La definición BNF para las expresiones del lenguaje:
 ;;
 ;; <program> ::= <expression>
@@ -113,6 +111,7 @@
 ;; 
 ;; <letra> ::= [A-Za-z]
 
+;Especificación Léxica
 
 (define scanner-spec-mini-py
   '((white-sp
@@ -120,15 +119,13 @@
     (comment
      ("%!" (arbno (not #\newline))) skip)
     (identifier(letter (arbno (or letter digit "?"))) symbol)
-    (identifier
-      (letter (arbno (or letter digit "_" "-" "?")))
-      symbol)
     (number (digit (arbno digit)) number)
     (number ("-" digit (arbno digit)) number)
     (number (digit (arbno digit) "." digit (arbno digit)) number)
     (number ("-" digit (arbno digit) "." digit (arbno digit)) number)
     (string("\"" (arbno (not #\")) "\"") string)))
 
+;Especificación Sintáctica (gramática)
 
 (define grammar-mini-py
   '((program ((arbno class-decl) expression) a-program)
@@ -149,6 +146,7 @@
     (expression ("rec" (arbno identifier "(" (separated-list identifier ",") ")" "=" expression) "in" expression) letrec-exp)
     (expression ("set" identifier "=" expression) set-exp)
 
+    
     
     (expression ("begin" expression (arbno ";" expression) "end") begin-exp) 
     (expression ("for" "(" identifier "=" expression "to" expression ")" "{" (separated-list expression ",") "}") for-exp)
@@ -215,6 +213,9 @@
     (expression ("==" "(" expression expression ")") equal-exp)
     (expression ("!=" "(" expression expression ")") not-equal-exp)
 
+
+
+    
     ;; Circuitos
     (expression ("circuit" gate-list) circuit-exp)
     (circuit (gate-list) circuit-def)
@@ -267,20 +268,32 @@
       ("super" identifier    "("  (separated-list expression ",") ")")
       super-call-exp)
 
+   
     ))
 
+
+
+;Construidos automáticamente:
 
  (sllgen:make-define-datatypes scanner-spec-mini-py grammar-mini-py)
 
 (define show-the-datatypes
   (lambda () (sllgen:list-define-datatypes scanner-spec-mini-py grammar-mini-py)))
 
+;*******************************************************************************************
+;Parser, Scanner, Interfaz
+
+;El FrontEnd (Análisis léxico (scanner) y sintáctico (parser) integrados)
 
 (define scan&parse
   (sllgen:make-string-parser scanner-spec-mini-py grammar-mini-py))
 
+;El Analizador Léxico (Scanner)
+
 (define just-scan
   (sllgen:make-string-scanner scanner-spec-mini-py grammar-mini-py))
+
+;El Interpretador (FrontEnd + Evaluación + señal para lectura )
 
 (define interpretador
   (sllgen:make-rep-loop  "--> "
@@ -289,6 +302,12 @@
       scanner-spec-mini-py
       grammar-mini-py)))
 
+;*******************************************************************************************
+;El Interprete
+
+;eval-program: <programa> -> numero
+; función que evalúa un programa teniendo en cuenta un ambiente dado (se inicializa dentro del programa)
+
 (define eval-program 
   (lambda (pgm)
     (cases program pgm
@@ -296,7 +315,25 @@
         (elaborate-class-decls! c-decls) ;\new1
         (eval-expression exp (empty-env))))))
 
+; Ambiente inicial
+;(define init-env
+;  (lambda ()
+;    (extend-env
+;     '(x y z)
+;     '(4 2 5)
+;     (empty-env))))
 
+
+;(define init-env
+;  (lambda ()
+;    (extend-env
+;     '(x y z f)
+;     (list 4 2 5 (closure '(y) (primapp-exp (mult-prim) (cons (var-exp 'y) (cons (primapp-exp (decr-prim) (cons (var-exp 'y) ())) ())))
+;                      (empty-env)))
+;     (empty-env))))
+
+;eval-expression: <expression> <enviroment> -> numero
+; evalua la expresión en el ambiente de entrada
 (define eval-expression
   (lambda (exp env)
     (cases expression exp
@@ -430,6 +467,8 @@
                      (args (eval-rands rands env)))
                  (if (procval? proc)
                      (apply-procedure proc args) proc
+;;                      (eopl:error 'eval-expression
+;;                                  "Attempt to apply non-procedure ~s" proc))
                      )))
       
       (letrec-exp (proc-names idss bodies letrec-body)
@@ -475,7 +514,7 @@
                  (let ((val (eval-expression exp env)))
                    (display val)
                    (newline)
-                   val))
+                   val)) ; también devuelve el valor para no romper secuencia
 
       ;;operadores binarios
       (greater-than-exp (e1 e2)
@@ -495,9 +534,8 @@
             (eval-expression e2 env)))
 
       (equal-exp (e1 e2)
-                 (equal? (eval-expression e1 env)
-                         (eval-expression e2 env)))
-
+        (= (eval-expression e1 env)
+           (eval-expression e2 env)))
 
       (not-equal-exp (e1 e2)
         (not (= (eval-expression e1 env)
@@ -532,9 +570,7 @@
 (define eval-rand
   (lambda (rand env)
     (eval-expression rand env)))
-(define true-value?
-  (lambda (v)
-    (not (eqv? v #f))))
+
 ;apply-primitive: <primitiva> <list-of-expression> -> numero
 (define apply-primitive
   (lambda (prim args env)
@@ -570,6 +606,10 @@
 
       )))
 
+;true-value?: determina si un valor dado corresponde a un valor booleano falso o verdadero
+(define true-value?
+  (lambda (x)
+    (not (zero? x))))
 ;;;;;;;;;;;;;;;; declarations ;;;;;;;;;;;;;;;;
 
 
@@ -680,11 +720,11 @@
 
 (define-datatype environment environment?
   (empty-env-record)
-  (extended-env-record   
+  (extended-env-record     ; para var
    (syms (list-of symbol?))
    (vals vector?)
    (env environment?))
-  (const-env-record        
+  (const-env-record        ; para const
    (syms (list-of symbol?))
    (vals (list-of expval?))
    (env environment?)))
@@ -706,7 +746,7 @@
       (extended-env-record (syms vals env)
         (let ((pos (list-index1 sym syms)))
           (if pos
-              (a-ref pos vals) 
+              (a-ref pos vals) ; <- Esto es una referencia
               (apply-env-ref env sym))))
       (const-env-record (syms vals env)
         (let ((pos (list-index1 sym syms)))
